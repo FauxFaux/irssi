@@ -50,6 +50,8 @@ typedef struct
 	int port;
 } GIOSSLChannel;
 
+void irssi_redraw(void);
+
 static int ssl_inited = FALSE;
 
 static void irssi_ssl_free(GIOChannel *handle)
@@ -418,6 +420,17 @@ static GIOFuncs irssi_ssl_channel_funcs = {
     irssi_ssl_get_flags
 };
 
+static int getpass_cb(char *buf, int size, int rwflag, void *keyname)
+{
+	char *pp, prompt[256];
+        snprintf(prompt, 256, "Enter Passphrase for %s:", keyname);
+	pp = getpass(prompt);
+	strncpy(buf, pp, size);
+	buf[size - 1] = '\0';
+	irssi_redraw();
+	return(strlen(buf));
+}
+
 static gboolean irssi_ssl_init(void)
 {
 	SSL_library_init();
@@ -484,6 +497,8 @@ static GIOChannel *irssi_ssl_get_iochannel(GIOChannel *handle, int port, SERVER_
 		scert = convert_home(mycert);
 		if (mypkey && *mypkey)
 			spkey = convert_home(mypkey);
+		SSL_CTX_set_default_passwd_cb(ctx, getpass_cb);
+		SSL_CTX_set_default_passwd_cb_userdata(ctx, spkey);
 		if (! SSL_CTX_use_certificate_file(ctx, scert, SSL_FILETYPE_PEM))
 			g_warning("Loading of client certificate '%s' failed: %s", mycert, ERR_reason_error_string(ERR_get_error()));
 		else if (! SSL_CTX_use_PrivateKey_file(ctx, spkey ? spkey : scert, SSL_FILETYPE_PEM))
