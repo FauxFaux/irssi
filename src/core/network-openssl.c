@@ -497,6 +497,8 @@ static GIOChannel *irssi_ssl_get_iochannel(GIOChannel *handle, int port, SERVER_
 		scert = convert_home(mycert);
 		if (mypkey && *mypkey)
 			spkey = convert_home(mypkey);
+
+		ERR_clear_error();
 		SSL_CTX_set_default_passwd_cb(ctx, getpass_cb);
 		SSL_CTX_set_default_passwd_cb_userdata(ctx, spkey);
 		if (! SSL_CTX_use_certificate_file(ctx, scert, SSL_FILETYPE_PEM))
