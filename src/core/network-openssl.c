@@ -505,6 +505,7 @@ static GIOChannel *irssi_ssl_get_iochannel(GIOChannel *handle, int port, SERVER_
 			g_warning("Loading of private key '%s' failed: %s", mypkey ? mypkey : mycert, ERR_reason_error_string(ERR_get_error()));
 		else if (! SSL_CTX_check_private_key(ctx))
 			g_warning("Private key does not match the certificate");
+		g_warning(ERR_error_string(ERR_get_error(), NULL));
 		g_free(scert);
 		g_free(spkey);
 	}
