@@ -423,7 +423,7 @@ static GIOFuncs irssi_ssl_channel_funcs = {
 static int getpass_cb(char *buf, int size, int rwflag, void *keyname)
 {
 	char *pp, prompt[256];
-        snprintf(prompt, 256, "Enter Passphrase for %s:", keyname);
+	snprintf(prompt, 256, "Enter Passphrase for %s:", keyname);
 	pp = getpass(prompt);
 	strncpy(buf, pp, size);
 	buf[size - 1] = '\0';
