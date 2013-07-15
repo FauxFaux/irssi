@@ -32,3 +32,5 @@ irssi-version.h
 default-theme.h
 default-config.h
 src/fe-text/irssi
+Makefile.old
+*~
