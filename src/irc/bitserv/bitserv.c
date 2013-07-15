@@ -1,5 +1,5 @@
 /*
- proxy.c : irc proxy
+ bitserv.c : irc bitserv
 
     Copyright (C) 1999-2001 Timo Sirainen
 
@@ -23,32 +23,32 @@
 #include "settings.h"
 #include "levels.h"
 
-void irc_proxy_init(void)
+void irc_bitserv_init(void)
 {
-	settings_add_str("irssiproxy", "irssiproxy_ports", "");
-	settings_add_str("irssiproxy", "irssiproxy_password", "");
-	settings_add_str("irssiproxy", "irssiproxy_bind", "");
+	settings_add_str("irssibitserv", "irssibitserv_ports", "");
+	settings_add_str("irssibitserv", "irssibitserv_password", "");
+	settings_add_str("irssibitserv", "irssibitserv_bind", "");
 
-	if (*settings_get_str("irssiproxy_password") == '\0') {
+	if (*settings_get_str("irssibitserv_password") == '\0') {
 		/* no password - bad idea! */
 		signal_emit("gui dialog", 2, "warning",
 			    "Warning!! Password not specified, everyone can "
-			    "use this proxy! Use /set irssiproxy_password "
+			    "use this bitserv! Use /set irssibitserv_password "
 			    "<password> to set it");
 	}
-	if (*settings_get_str("irssiproxy_ports") == '\0') {
+	if (*settings_get_str("irssibitserv_ports") == '\0') {
 		signal_emit("gui dialog", 2, "warning",
-			    "No proxy ports specified. Use /SET "
-			    "irssiproxy_ports <ircnet>=<port> <ircnet2>=<port2> "
+			    "No bitserv ports specified. Use /SET "
+			    "irssibitserv_ports <ircnet>=<port> <ircnet2>=<port2> "
 			    "... to set them.");
 	}
 
-	proxy_listen_init();
+	bitserv_listen_init();
 	settings_check();
-        module_register("proxy", "irc");
+        module_register("bitserv", "irc");
 }
 
-void irc_proxy_deinit(void)
+void irc_bitserv_deinit(void)
 {
-	proxy_listen_deinit();
+	bitserv_listen_deinit();
 }

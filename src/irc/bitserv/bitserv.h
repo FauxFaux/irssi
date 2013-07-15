@@ -21,7 +21,7 @@ typedef struct {
 	char *nick, *host;
 	NET_SENDBUF_REC *handle;
 	int recv_tag;
-	char *proxy_address;
+	char *bitserv_address;
 	LISTEN_REC *listen;
 	IRC_SERVER_REC *server;
 	unsigned int pass_sent:1;
