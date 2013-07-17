@@ -1,20 +1,67 @@
-#include "module.h"
-#include "signals.h"
-#include "net-sendbuffer.h"
-#include "servers-redirect.h"
-#include "levels.h"
-#include "settings.h"
+#include "common.h"
+
+#define MODULE_NAME "bitserv"
 
 #include "irc.h"
 #include "irc-channels.h"
-
-#include "fe-common/core/printtext.h" /* FIXME: evil. need to do fe-bitserv */
-
-
-#include "module.h"
-#include "signals.h"
-#include "settings.h"
+#include "irc-nicklist.h"
+#include "irc-servers.h"
+#include "irssi-version.h"
 #include "levels.h"
+#include "modes.h"
+#include "net-sendbuffer.h"
+#include "network.h"
+#include "recode.h"
+#include "servers-redirect.h"
+#include "settings.h"
+#include "signals.h"
+
+#include "fe-text/gui-windows.h"
+#include "fe-common/core/printtext.h"
+
+GSList *bitserv_listens;
+GSList *bitserv_clients;
+
+static GString *next_line;
+static int ignore_next;
+
+
+typedef struct {
+	int port;
+	char *ircnet;
+
+	int tag;
+	GIOChannel *handle;
+
+	GSList *clients;
+} LISTEN_REC;
+
+typedef struct {
+	char *nick, *host;
+	NET_SENDBUF_REC *handle;
+	int recv_tag;
+	char *bitserv_address;
+	LISTEN_REC *listen;
+	IRC_SERVER_REC *server;
+	unsigned int pass_sent:1;
+	unsigned int user_sent:1;
+	unsigned int connected:1;
+	unsigned int want_ctcp:1;
+} CLIENT_REC;
+
+void bitserv_listen_init(void);
+void bitserv_listen_deinit(void);
+
+void bitserv_settings_init(void);
+
+void bitserv_dump_data(CLIENT_REC *client);
+void bitserv_client_reset_nick(CLIENT_REC *client);
+
+void bitserv_outdata(CLIENT_REC *client, const char *data, ...);
+void bitserv_outdata_all(IRC_SERVER_REC *server, const char *data, ...);
+void bitserv_outserver(CLIENT_REC *client, const char *data, ...);
+void bitserv_outserver_all(IRC_SERVER_REC *server, const char *data, ...);
+void bitserv_outserver_all_except(CLIENT_REC *client, const char *data, ...);
 
 void irc_bitserv_init(void)
 {
@@ -45,21 +92,6 @@ void irc_bitserv_deinit(void)
 {
 	bitserv_listen_deinit();
 }
-
-#include "module.h"
-#include "network.h"
-#include "net-sendbuffer.h"
-#include "settings.h"
-#include "irssi-version.h"
-#include "recode.h"
-
-#include "irc-servers.h"
-#include "irc-channels.h"
-#include "irc-nicklist.h"
-#include "modes.h"
-
-#include "fe-common/core/printtext.h"
-#include "src/fe-text/gui-windows.h"
 
 void bitserv_outdata(CLIENT_REC *client, const char *data, ...)
 {
@@ -344,12 +376,6 @@ void bitserv_dump_data(CLIENT_REC *client)
 		g_slist_foreach(client->server->channels, (GFunc) dump_join, client);
 	}
 }
-
-GSList *bitserv_listens;
-GSList *bitserv_clients;
-
-static GString *next_line;
-static int ignore_next;
 
 static void remove_client(CLIENT_REC *rec)
 {

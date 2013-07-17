@@ -19,9 +19,7 @@ libirc_bitserv_la_DEPENDENCIES = libirc_bitserv.a
 libirc_bitserv_la_SOURCES = \
 	bitserv.c
 
-noinst_HEADERS = \
-	module.h \
-	bitserv.h
+noinst_HEADERS =
 
 clean-generic:
 	rm -f libirc_bitserv.a
