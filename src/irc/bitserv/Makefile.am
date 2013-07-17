@@ -17,9 +17,7 @@ libirc_bitserv_la_LDFLAGS = -module -avoid-version
 libirc_bitserv_la_DEPENDENCIES = libirc_bitserv.a
 
 libirc_bitserv_la_SOURCES = \
-	bitserv.c \
-	dump.c \
-	listen.c
+	bitserv.c
 
 noinst_HEADERS = \
 	module.h \
