@@ -358,199 +358,6 @@ static void sig_listen(LISTEN_REC *listen)
 		  "Proxy: Client connected from %s", rec->host);
 }
 
-static void sig_incoming(IRC_SERVER_REC *server, const char *line)
-{
-	g_return_if_fail(line != NULL);
-
-	/* send server event to all clients */
-	g_string_printf(next_line, "%s\n", line);
-}
-
-static void sig_server_event(IRC_SERVER_REC *server, const char *line,
-			     const char *nick, const char *address)
-{
-	GSList *tmp;
-        void *client;
-        const char *signal;
-	char *event, *args;
-        int redirected;
-
-	g_return_if_fail(line != NULL);
-	if (!IS_IRC_SERVER(server))
-		return;
-
-	/* get command.. */
-	event = g_strconcat("event ", line, NULL);
-	args = strchr(event+6, ' ');
-	if (args != NULL) *args++ = '\0'; else args = "";
-	while (*args == ' ') args++;
-	ascii_strdown(event);
-
-	signal = server_redirect_peek_signal(server, nick, event, args, &redirected);
-	if ((signal != NULL && strncmp(signal, "bitserv ", 6) != 0) ||
-	    (signal == NULL && redirected)) {
-		/* we want to send this to one client (or bitserv itself) only */
-		/* bitserv only */
-		g_free(event);
-		return;
-	}
-
-	if (signal != NULL) {
-                server_redirect_get_signal(server, nick, event, args);
-		if (sscanf(signal+6, "%p", &client) == 1) {
-			/* send it to specific client only */
-			if (g_slist_find(bitserv_clients, client) != NULL)
-				net_sendbuffer_send(((CLIENT_REC *) client)->handle, next_line->str, next_line->len);
-			g_free(event);
-                        signal_stop();
-			return;
-		}
-	}
-
-        if (strcmp(event, "event privmsg") == 0 &&
-	    strstr(args, " :\001") != NULL &&
-	    strstr(args, " :\001ACTION") == NULL) {
-		/* CTCP - either answer ourself or forward it to one client */
-		for (tmp = bitserv_clients; tmp != NULL; tmp = tmp->next) {
-	        	CLIENT_REC *rec = tmp->data;
-		                        
-			if (rec->want_ctcp == 1) {
-                        	/* only CTCP for the chatnet where client is connected to will be forwarded */
-                        	if (strstr(rec->bitserv_address, server->connrec->chatnet) != NULL) {
-					net_sendbuffer_send(rec->handle,
-							    next_line->str, next_line->len);
-					signal_stop();
-				}
-			}
-		}
-		g_free(event);
-		return;
-	}
-
-	if (strcmp(event, "event ping") == 0 ||
-	    strcmp(event, "event pong") == 0) {
-		/* We want to answer ourself to PINGs and CTCPs.
-		   Also hide PONGs from clients. */
-		g_free(event);
-		return;
-	}
-
-	/* send the data to clients.. */
-        bitserv_outdata_all(server, "%s", next_line->str);
-
-	g_free(event);
-}
-
-static void event_connected(IRC_SERVER_REC *server)
-{
-	GSList *tmp;
-        const char *chatnet;
-
-	if (!IS_IRC_SERVER(server))
-		return;
-
-        chatnet = server->connrec->chatnet;
-	for (tmp = bitserv_clients; tmp != NULL; tmp = tmp->next) {
-		CLIENT_REC *rec = tmp->data;
-
-		if (rec->connected && rec->server == NULL &&
-		    (strcmp(rec->listen->ircnet, "*") == 0 ||
-		     (chatnet != NULL &&
-		      g_strcasecmp(chatnet, rec->listen->ircnet) == 0))) {
-			bitserv_outdata(rec, ":%s NOTICE %s :Connected to server\n",
-				      rec->bitserv_address, rec->nick);
-			rec->server = server;
-			bitserv_client_reset_nick(rec);
-		}
-	}
-}
-
-static void bitserv_server_disconnected(CLIENT_REC *client,
-				      IRC_SERVER_REC *server)
-{
-	GSList *tmp;
-
-	bitserv_outdata(client, ":%s NOTICE %s :Connection lost to server %s\n",
-		      client->bitserv_address, client->nick,
-		      server->connrec->address);
-
-	for (tmp = server->channels; tmp != NULL; tmp = tmp->next) {
-		IRC_CHANNEL_REC *rec = tmp->data;
-
-		bitserv_outserver(client, "PART %s :Connection lost to server",
-				rec->name);
-	}
-}
-
-static void sig_server_disconnected(IRC_SERVER_REC *server)
-{
-	GSList *tmp;
-
-	if (!IS_IRC_SERVER(server))
-		return;
-
-	for (tmp = bitserv_clients; tmp != NULL; tmp = tmp->next) {
-		CLIENT_REC *rec = tmp->data;
-
-		if (rec->connected && rec->server == server) {
-                        bitserv_server_disconnected(rec, server);
-			rec->server = NULL;
-		}
-	}
-}
-
-static void event_nick(IRC_SERVER_REC *server, const char *data,
-		       const char *orignick)
-{
-	GSList *tmp;
-
-	if (!IS_IRC_SERVER(server))
-		return;
-
-	if (g_strcasecmp(orignick, server->nick) != 0)
-		return;
-
-	if (*data == ':') data++;
-	for (tmp = bitserv_clients; tmp != NULL; tmp = tmp->next) {
-		CLIENT_REC *rec = tmp->data;
-
-		if (rec->connected && rec->server == server) {
-			g_free(rec->nick);
-			rec->nick = g_strdup(data);
-		}
-	}
-}
-
-static void sig_message_own_public(IRC_SERVER_REC *server, const char *msg,
-                                   const char *target)
-{
-	if (!IS_IRC_SERVER(server))
-		return;
-
-	if (!ignore_next)
-		bitserv_outserver_all(server, "PRIVMSG %s :%s", target, msg);
-}
-
-static void sig_message_own_private(IRC_SERVER_REC *server, const char *msg,
-                                   const char *target, const char *origtarget)
-{
-	if (!IS_IRC_SERVER(server))
-		return;
-
-	if (!ignore_next)
-		bitserv_outserver_all(server, "PRIVMSG %s :%s", target, msg);
-}
-
-static void sig_message_own_action(IRC_SERVER_REC *server, const char *msg,
-                                   const char *target)
-{
-	if (!IS_IRC_SERVER(server))
-		return;
-
-	if (!ignore_next)
-		bitserv_outserver_all(server, "PRIVMSG %s :\001ACTION %s\001", target, msg);
-}
-
 static LISTEN_REC *find_listen(const char *ircnet, int port)
 {
 	GSList *tmp;
@@ -662,7 +469,7 @@ static void sig_print_text(WINDOW_REC *win) {
     GSList *tmp;
     for (tmp = bitserv_clients; tmp != NULL; tmp = tmp->next) {
         CLIENT_REC *rec = tmp->data;
-        bitserv_outdata(rec, "%d %s\n", dest->window->refnum, text);
+//        bitserv_outdata(rec, "%d %s\n", win->refnum, text);
     }
 }
 
@@ -682,10 +489,6 @@ void bitserv_listen_init(void)
 	bitserv_listens = NULL;
 	read_settings();
 
-	signal_add_first("event nick", (SIGNAL_FUNC) event_nick);
-	signal_add("message own_public", (SIGNAL_FUNC) sig_message_own_public);
-	signal_add("message own_private", (SIGNAL_FUNC) sig_message_own_private);
-	signal_add("message irc own_action", (SIGNAL_FUNC) sig_message_own_action);
 	signal_add("setup changed", (SIGNAL_FUNC) read_settings);
 	
     signal_add("gui print text finished", (SIGNAL_FUNC) sig_print_text);
@@ -698,10 +501,6 @@ void bitserv_listen_deinit(void)
 		remove_listen(bitserv_listens->data);
 	g_string_free(next_line, TRUE);
 
-	signal_remove("event nick", (SIGNAL_FUNC) event_nick);
-	signal_remove("message own_public", (SIGNAL_FUNC) sig_message_own_public);
-	signal_remove("message own_private", (SIGNAL_FUNC) sig_message_own_private);
-	signal_remove("message irc own_action", (SIGNAL_FUNC) sig_message_own_action);
 	signal_remove("setup changed", (SIGNAL_FUNC) read_settings);
 
     signal_remove("gui print text finished", (SIGNAL_FUNC) sig_print_text);
