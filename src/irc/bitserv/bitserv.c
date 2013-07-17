@@ -1,22 +1,15 @@
-/*
- bitserv.c : irc bitserv
+#include "module.h"
+#include "signals.h"
+#include "net-sendbuffer.h"
+#include "servers-redirect.h"
+#include "levels.h"
+#include "settings.h"
 
-    Copyright (C) 1999-2001 Timo Sirainen
+#include "irc.h"
+#include "irc-channels.h"
 
-    This program is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
+#include "fe-common/core/printtext.h" /* FIXME: evil. need to do fe-bitserv */
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License along
-    with this program; if not, write to the Free Software Foundation, Inc.,
-    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-*/
 
 #include "module.h"
 #include "signals.h"
@@ -52,25 +45,6 @@ void irc_bitserv_deinit(void)
 {
 	bitserv_listen_deinit();
 }
-/*
- dump.c : bitserv plugin - output all information about irc session
-
-    Copyright (C) 1999-2001 Timo Sirainen
-
-    This program is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License along
-    with this program; if not, write to the Free Software Foundation, Inc.,
-    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-*/
 
 #include "module.h"
 #include "network.h"
@@ -370,37 +344,6 @@ void bitserv_dump_data(CLIENT_REC *client)
 		g_slist_foreach(client->server->channels, (GFunc) dump_join, client);
 	}
 }
-/*
- listen.c : irc bitserv
-
-    Copyright (C) 1999-2001 Timo Sirainen
-
-    This program is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License along
-    with this program; if not, write to the Free Software Foundation, Inc.,
-    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-*/
-
-#include "module.h"
-#include "signals.h"
-#include "net-sendbuffer.h"
-#include "servers-redirect.h"
-#include "levels.h"
-#include "settings.h"
-
-#include "irc.h"
-#include "irc-channels.h"
-
-#include "fe-common/core/printtext.h" /* FIXME: evil. need to do fe-bitserv */
 
 GSList *bitserv_listens;
 GSList *bitserv_clients;
