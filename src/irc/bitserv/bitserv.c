@@ -49,49 +49,6 @@ typedef struct {
 	unsigned int want_ctcp:1;
 } CLIENT_REC;
 
-void bitserv_listen_init(void);
-void bitserv_listen_deinit(void);
-
-void bitserv_settings_init(void);
-
-void bitserv_dump_data(CLIENT_REC *client);
-void bitserv_client_reset_nick(CLIENT_REC *client);
-
-void bitserv_outdata(CLIENT_REC *client, const char *data, ...);
-void bitserv_outdata_all(IRC_SERVER_REC *server, const char *data, ...);
-void bitserv_outserver(CLIENT_REC *client, const char *data, ...);
-void bitserv_outserver_all(IRC_SERVER_REC *server, const char *data, ...);
-void bitserv_outserver_all_except(CLIENT_REC *client, const char *data, ...);
-
-void irc_bitserv_init(void)
-{
-	settings_add_str("irssibitserv", "irssibitserv_ports", "");
-	settings_add_str("irssibitserv", "irssibitserv_password", "");
-	settings_add_str("irssibitserv", "irssibitserv_bind", "");
-
-	if (*settings_get_str("irssibitserv_password") == '\0') {
-		/* no password - bad idea! */
-		signal_emit("gui dialog", 2, "warning",
-			    "Warning!! Password not specified, everyone can "
-			    "use this bitserv! Use /set irssibitserv_password "
-			    "<password> to set it");
-	}
-	if (*settings_get_str("irssibitserv_ports") == '\0') {
-		signal_emit("gui dialog", 2, "warning",
-			    "No bitserv ports specified. Use /SET "
-			    "irssibitserv_ports <ircnet>=<port> <ircnet2>=<port2> "
-			    "... to set them.");
-	}
-
-	bitserv_listen_init();
-	settings_check();
-        module_register("bitserv", "irc");
-}
-
-void irc_bitserv_deinit(void)
-{
-	bitserv_listen_deinit();
-}
 
 void bitserv_outdata(CLIENT_REC *client, const char *data, ...)
 {
@@ -204,71 +161,6 @@ void bitserv_outserver_all_except(CLIENT_REC *client, const char *data, ...)
 	va_end(args);
 }
 
-static void create_names_start(GString *str, IRC_CHANNEL_REC *channel,
-			       CLIENT_REC *client)
-{
-	g_string_printf(str, ":%s 353 %s %c %s :",
-			 client->bitserv_address, client->nick,
-			 channel_mode_is_set(channel, 'p') ? '*' :
-			 channel_mode_is_set(channel, 's') ? '@' : '=',
-			 channel->name);
-}
-
-static void dump_join(IRC_CHANNEL_REC *channel, CLIENT_REC *client)
-{
-	GSList *tmp, *nicks;
-	GString *str;
-	int first;
-	char *recoded;
-
-	bitserv_outserver(client, "JOIN %s", channel->name);
-
-	str = g_string_new(NULL);
-	create_names_start(str, channel, client);
-
-	first = TRUE;
-	nicks = nicklist_getnicks(CHANNEL(channel));
-	for (tmp = nicks; tmp != NULL; tmp = tmp->next) {
-		NICK_REC *nick = tmp->data;
-
-		if (str->len >= 500) {
-			g_string_append_c(str, '\n');
-			bitserv_outdata(client, "%s", str->str);
-			create_names_start(str, channel, client);
-			first = TRUE;
-		}
-
-		if (first)
-			first = FALSE;
-		else
-			g_string_append_c(str, ' ');
-
-		if (nick->prefixes[0])
-                        g_string_append_c(str, nick->prefixes[0]);
-		g_string_append(str, nick->nick);
-	}
-	g_slist_free(nicks);
-
-	g_string_append_c(str, '\n');
-	bitserv_outdata(client, "%s", str->str);
-	g_string_free(str, TRUE);
-
-	bitserv_outdata(client, ":%s 366 %s %s :End of /NAMES list.\n",
-		      client->bitserv_address, client->nick, channel->name);
-	if (channel->topic != NULL) {
-		/* this is needed because the topic may be encoded into other charsets internaly */
-		recoded = recode_out(SERVER(client->server), channel->topic, channel->name);
-		bitserv_outdata(client, ":%s 332 %s %s :%s\n",
-			      client->bitserv_address, client->nick,
-			      channel->name, recoded);
-		g_free(recoded);
-		if (channel->topic_time > 0)
-			bitserv_outdata(client, ":%s 333 %s %s %s %d\n",
-			              client->bitserv_address, client->nick,
-			              channel->name, channel->topic_by, channel->topic_time);
-	}
-}
-
 void bitserv_client_reset_nick(CLIENT_REC *client)
 {
 	if (client->server == NULL ||
@@ -282,20 +174,7 @@ void bitserv_client_reset_nick(CLIENT_REC *client)
 	client->nick = g_strdup(client->server->nick);
 }
 
-static void bitserv_dump_data_005(gpointer key, gpointer value, gpointer context)
-{
-	if (*(char *)value != '\0')
-		g_string_append_printf(context, "%s=%s ", (char *)key, (char *)value);
-	else
-		g_string_append_printf(context, "%s ", (char *)key);
-}
-
-void bitserv_dump_data(CLIENT_REC *client)
-{
-	GString *isupport_out, *paramstr;
-	char **paramlist, **tmp;
-	int count;
-
+static void bitserv_dump_data(CLIENT_REC *client) {
     GString *text = g_string_new(NULL);
     GSList *win_item;
     for (win_item = windows; win_item != NULL; win_item = win_item->next) {
@@ -307,74 +186,6 @@ void bitserv_dump_data(CLIENT_REC *client)
             bitserv_outdata(client, "%d %d %s\n", line->info.time, win_rec->refnum, text->str);
         }
     }
-	bitserv_client_reset_nick(client);
-
-
-	/* welcome info */
-	bitserv_outdata(client, ":%s 001 %s :Welcome to the Internet Relay Network %s!%s@bitserv\n", client->bitserv_address, client->nick, client->nick, settings_get_str("user_name"));
-	bitserv_outdata(client, ":%s 002 %s :Your host is irssi-bitserv, running version %s\n", client->bitserv_address, client->nick, PACKAGE_VERSION);
-	bitserv_outdata(client, ":%s 003 %s :This server was created ...\n", client->bitserv_address, client->nick);
-	if (client->server == NULL || !client->server->emode_known)
-		bitserv_outdata(client, ":%s 004 %s %s %s oirw abiklmnopqstv\n", client->bitserv_address, client->nick, client->bitserv_address, PACKAGE_VERSION);
-	else
-		bitserv_outdata(client, ":%s 004 %s %s %s oirw abeIiklmnopqstv\n", client->bitserv_address, client->nick, client->bitserv_address, PACKAGE_VERSION);
-
-	if (client->server != NULL && client->server->isupport_sent) {
-		isupport_out = g_string_new(NULL);
-		g_hash_table_foreach(client->server->isupport, bitserv_dump_data_005, isupport_out);
-		if (isupport_out->len > 0)
-			g_string_truncate(isupport_out, isupport_out->len-1);
-
-		bitserv_outdata(client, ":%s 005 %s ", client->bitserv_address, client->nick);
-
-		paramstr = g_string_new(NULL);
-		paramlist = g_strsplit(isupport_out->str, " ", -1);
-		count = 0;
-		tmp = paramlist;
-
-		for (;; tmp++) {
-			if (*tmp != NULL) {
-				g_string_append_printf(paramstr, "%s ", *tmp);
-				if (++count < 15)
-					continue;
-			}
-
-			count = 0;
-			if (paramstr->len > 0)
-				g_string_truncate(paramstr, paramstr->len-1);
-			g_string_append_printf(paramstr, " :are supported by this server\n");
-			bitserv_outdata(client, "%s", paramstr->str);
-			g_string_truncate(paramstr, 0);
-			g_string_printf(paramstr, ":%s 005 %s ", client->bitserv_address, client->nick);
-
-			if (*tmp == NULL || tmp[1] == NULL)
-				break;
-		}
-
-		g_string_free(isupport_out, TRUE);
-		g_string_free(paramstr, TRUE);
-		g_strfreev(paramlist);
-	}
-
-	bitserv_outdata(client, ":%s 251 %s :There are 0 users and 0 invisible on 1 servers\n", client->bitserv_address, client->nick);
-	bitserv_outdata(client, ":%s 255 %s :I have 0 clients, 0 services and 0 servers\n", client->bitserv_address, client->nick);
-	bitserv_outdata(client, ":%s 422 %s :MOTD File is missing\n", client->bitserv_address, client->nick);
-
-	/* user mode / away status */
-	if (client->server != NULL) {
-		if (client->server->usermode != NULL) {
-			bitserv_outserver(client, "MODE %s :+%s",
-					client->server->nick,
-					client->server->usermode);
-		}
-		if (client->server->usermode_away) {
-			bitserv_outdata(client, ":%s 306 %s :You have been marked as being away\n",
-				      client->bitserv_address, client->nick);
-		}
-
-		/* Send channel joins */
-		g_slist_foreach(client->server->channels, (GFunc) dump_join, client);
-	}
 }
 
 static void remove_client(CLIENT_REC *rec)
@@ -409,36 +220,6 @@ static void bitserv_redirect_event(CLIENT_REC *client, const char *command,
 	g_free(str);
 }
 
-static void grab_who(CLIENT_REC *client, const char *channel)
-{
-	GString *arg;
-	char **list, **tmp;
-	int count;
-
-	/* /WHO a,b,c may respond with either one "a,b,c End of WHO" message
-	   or three different "a End of WHO", "b End of WHO", .. messages */
-	list = g_strsplit(channel, ",", -1);
-
-	arg = g_string_new(channel);
-
-	for (tmp = list, count = 0; *tmp != NULL; tmp++, count++) {
-		if (strcmp(*tmp, "0") == 0) {
-			/* /who 0 displays everyone */
-			**tmp = '*';
-		}
-
-		g_string_append_c(arg, ' ');
-		g_string_append(arg, *tmp);
-	}
-
-	bitserv_redirect_event(client, "who",
-			     client->server->one_endofwho ? 1 : count,
-			     arg->str, -1);
-
-	g_strfreev(list);
-	g_string_free(arg, TRUE);
-}
-
 static void handle_client_connect_cmd(CLIENT_REC *client,
 				      const char *cmd, const char *args)
 {
@@ -468,7 +249,6 @@ static void handle_client_connect_cmd(CLIENT_REC *client,
 static void handle_client_cmd(CLIENT_REC *client, char *cmd, char *args,
 			      const char *data)
 {
-	GSList *tmp;
 	if (!client->connected) {
 		handle_client_connect_cmd(client, cmd, args);
 		return;
@@ -495,96 +275,6 @@ static void handle_client_cmd(CLIENT_REC *client, char *cmd, char *args,
 			return;
 		}
 		g_free(params);
-	}
-
-	if (strcmp(cmd, "PROXY") == 0) {
-		if (g_ascii_strcasecmp(args, "CTCP ON") == 0) {
-                        /* client wants all ctcps */
-			client->want_ctcp = 1;
-	                for (tmp = bitserv_clients; tmp != NULL; tmp = tmp->next) {
-				CLIENT_REC *rec = tmp->data;
-				if ((g_strcasecmp(client->listen->ircnet,rec->listen->ircnet) == 0) &&
-					/* kludgy way to check if the clients aren't the same */
-					(client->recv_tag != rec->recv_tag)) {
-						if (rec->want_ctcp == 1)
-							bitserv_outdata(rec, ":%s NOTICE %s :Another client is now receiving CTCPs sent to %s\n",
-			                                      rec->bitserv_address, rec->nick, rec->listen->ircnet);
-						rec->want_ctcp = 0;
-		                }
-						                                      
-			}
-			bitserv_outdata(client, ":%s NOTICE %s :You're now receiving CTCPs sent to %s\n",
-				      client->bitserv_address, client->nick,client->listen->ircnet);
-		} else if (g_ascii_strcasecmp(args, "CTCP OFF") == 0) {
-                        /* client wants bitserv to handle all ctcps */
-			client->want_ctcp = 0;
-			bitserv_outdata(client, ":%s NOTICE %s :Proxy is now handling itself CTCPs sent to %s\n",
-				      client->bitserv_address, client->nick, client->listen->ircnet);
-		} else {
-			signal_emit("bitserv client command", 3, client, args, data);
-		}
-		return;
-	}
-
-	if (client->server == NULL || !client->server->connected) {
-		bitserv_outdata(client, ":%s NOTICE %s :Not connected to server\n",
-			      client->bitserv_address, client->nick);
-                return;
-	}
-
-        /* check if the command could be redirected */
-	if (strcmp(cmd, "WHO") == 0)
-		grab_who(client, args);
-	else if (strcmp(cmd, "WHOWAS") == 0)
-		bitserv_redirect_event(client, "whowas", 1, args, -1);
-	else if (strcmp(cmd, "WHOIS") == 0) {
-		char *p;
-
-		/* convert dots to spaces */
-		for (p = args; *p != '\0'; p++)
-			if (*p == ',') *p = ' ';
-
-		bitserv_redirect_event(client, "whois", 1, args, TRUE);
-	} else if (strcmp(cmd, "ISON") == 0)
-		bitserv_redirect_event(client, "ison", 1, args, -1);
-	else if (strcmp(cmd, "USERHOST") == 0)
-		bitserv_redirect_event(client, "userhost", 1, args, -1);
-	else if (strcmp(cmd, "MODE") == 0) {
-		/* convert dots to spaces */
-		char *slist, *str, mode, *p;
-		int argc;
-
-		p = strchr(args, ' ');
-		if (p != NULL) *p++ = '\0';
-		mode = p == NULL ? '\0' : *p;
-
-		slist = g_strdup(args);
-		argc = 1;
-		for (p = slist; *p != '\0'; p++) {
-			if (*p == ',') {
-				*p = ' ';
-				argc++;
-			}
-		}
-
-		/* get channel mode / bans / exception / invite list */
-		str = g_strdup_printf("%s %s", args, slist);
-		switch (mode) {
-		case '\0':
-			bitserv_redirect_event(client, "mode channel", argc, str, -1);
-			break;
-		case 'b':
-			bitserv_redirect_event(client, "mode b", argc, str, -1);
-			break;
-		case 'e':
-			bitserv_redirect_event(client, "mode e", argc, str, -1);
-			break;
-		case 'I':
-			bitserv_redirect_event(client, "mode I", argc, str, -1);
-			break;
-		}
-		g_free(str);
-		g_free(slist);
 	} else if (strcmp(cmd, "PRIVMSG") == 0) {
 		/* send the message to other clients as well */
 		char *params, *target, *msg;
@@ -846,4 +536,34 @@ void bitserv_listen_deinit(void)
 
     signal_remove("gui print text finished", (SIGNAL_FUNC) sig_print_text);
 	signal_remove("bitserv client dump", (SIGNAL_FUNC) sig_dump);
+}
+
+void irc_bitserv_init(void)
+{
+	settings_add_str("irssibitserv", "irssibitserv_ports", "");
+	settings_add_str("irssibitserv", "irssibitserv_password", "");
+	settings_add_str("irssibitserv", "irssibitserv_bind", "");
+
+	if (*settings_get_str("irssibitserv_password") == '\0') {
+		/* no password - bad idea! */
+		signal_emit("gui dialog", 2, "warning",
+			    "Warning!! Password not specified, everyone can "
+			    "use this bitserv! Use /set irssibitserv_password "
+			    "<password> to set it");
+	}
+	if (*settings_get_str("irssibitserv_ports") == '\0') {
+		signal_emit("gui dialog", 2, "warning",
+			    "No bitserv ports specified. Use /SET "
+			    "irssibitserv_ports <ircnet>=<port> <ircnet2>=<port2> "
+			    "... to set them.");
+	}
+
+	bitserv_listen_init();
+	settings_check();
+        module_register("bitserv", "irc");
+}
+
+void irc_bitserv_deinit(void)
+{
+	bitserv_listen_deinit();
 }
