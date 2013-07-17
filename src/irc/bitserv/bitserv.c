@@ -19,8 +19,8 @@
 #include "fe-text/gui-windows.h"
 #include "fe-common/core/printtext.h"
 
-GSList *bitserv_listens;
-GSList *bitserv_clients;
+static GSList *bitserv_listens;
+static GSList *bitserv_clients;
 
 static GString *next_line;
 static int ignore_next;
@@ -50,7 +50,7 @@ typedef struct {
 } CLIENT_REC;
 
 
-void bitserv_outdata(CLIENT_REC *client, const char *data, ...)
+static void bitserv_outdata(CLIENT_REC *client, const char *data, ...)
 {
 	va_list args;
 	char *str;
@@ -67,75 +67,7 @@ void bitserv_outdata(CLIENT_REC *client, const char *data, ...)
 	va_end(args);
 }
 
-void bitserv_outdata_all(IRC_SERVER_REC *server, const char *data, ...)
-{
-	va_list args;
-	GSList *tmp;
-	char *str;
-	int len;
-
-	g_return_if_fail(server != NULL);
-	g_return_if_fail(data != NULL);
-
-	va_start(args, data);
-
-	str = g_strdup_vprintf(data, args);
-	len = strlen(str);
-	for (tmp = bitserv_clients; tmp != NULL; tmp = tmp->next) {
-		CLIENT_REC *rec = tmp->data;
-
-		if (rec->connected && rec->server == server)
-			net_sendbuffer_send(rec->handle, str, len);
-	}
-	g_free(str);
-
-	va_end(args);
-}
-
-void bitserv_outserver(CLIENT_REC *client, const char *data, ...)
-{
-	va_list args;
-	char *str;
-
-	g_return_if_fail(client != NULL);
-	g_return_if_fail(data != NULL);
-
-	va_start(args, data);
-
-	str = g_strdup_vprintf(data, args);
-	bitserv_outdata(client, ":%s!%s@bitserv %s\n", client->nick,
-		      settings_get_str("user_name"), str);
-	g_free(str);
-
-	va_end(args);
-}
-
-void bitserv_outserver_all(IRC_SERVER_REC *server, const char *data, ...)
-{
-	va_list args;
-	GSList *tmp;
-	char *str;
-
-	g_return_if_fail(server != NULL);
-	g_return_if_fail(data != NULL);
-
-	va_start(args, data);
-
-	str = g_strdup_vprintf(data, args);
-	for (tmp = bitserv_clients; tmp != NULL; tmp = tmp->next) {
-		CLIENT_REC *rec = tmp->data;
-
-		if (rec->connected && rec->server == server) {
-			bitserv_outdata(rec, ":%s!%s@bitserv %s\n", rec->nick,
-				      settings_get_str("user_name"), str);
-		}
-	}
-	g_free(str);
-
-	va_end(args);
-}
-
-void bitserv_outserver_all_except(CLIENT_REC *client, const char *data, ...)
+static void bitserv_outserver_all_except(CLIENT_REC *client, const char *data, ...)
 {
 	va_list args;
 	GSList *tmp;
@@ -159,19 +91,6 @@ void bitserv_outserver_all_except(CLIENT_REC *client, const char *data, ...)
 	g_free(str);
 
 	va_end(args);
-}
-
-void bitserv_client_reset_nick(CLIENT_REC *client)
-{
-	if (client->server == NULL ||
-	    strcmp(client->nick, client->server->nick) == 0)
-		return;
-
-	bitserv_outdata(client, ":%s!bitserv NICK :%s\n",
-		      client->nick, client->server->nick);
-
-	g_free(client->nick);
-	client->nick = g_strdup(client->server->nick);
 }
 
 static void bitserv_dump_data(CLIENT_REC *client) {
@@ -512,7 +431,7 @@ static void sig_dump(CLIENT_REC *client, const char *data)
 	bitserv_outdata(client, data);
 }
 
-void bitserv_listen_init(void)
+static void bitserv_listen_init(void)
 {
 	next_line = g_string_new(NULL);
 
@@ -526,7 +445,7 @@ void bitserv_listen_init(void)
 	signal_add("bitserv client dump", (SIGNAL_FUNC) sig_dump);
 }
 
-void bitserv_listen_deinit(void)
+static void bitserv_listen_deinit(void)
 {
 	while (bitserv_listens != NULL)
 		remove_listen(bitserv_listens->data);
