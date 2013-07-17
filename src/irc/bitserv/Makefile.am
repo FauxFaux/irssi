@@ -5,6 +5,7 @@ INCLUDES = \
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/core/ \
 	-I$(top_srcdir)/src/irc/core/ \
+	-I$(top_srcdir)/src/fe-common/core/ \
 	$(GLIB_CFLAGS)
 
 libirc_bitserv.a:

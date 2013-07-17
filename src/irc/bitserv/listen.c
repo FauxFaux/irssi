@@ -111,24 +111,17 @@ static void handle_client_connect_cmd(CLIENT_REC *client,
 		else {
 			/* wrong password! */
 			remove_client(client);
-                        return;
+            return;
 		}
-	} else if (strcmp(cmd, "NICK") == 0) {
-		g_free_not_null(client->nick);
-		client->nick = g_strdup(args);
-	} else if (strcmp(cmd, "USER") == 0) {
-		client->user_sent = TRUE;
-	}
+    }
 
-	if (client->nick != NULL && client->user_sent) {
-		if (*password != '\0' && !client->pass_sent) {
-			/* client didn't send us PASS, kill it */
-			remove_client(client);
-		} else {
-			client->connected = TRUE;
-			bitserv_dump_data(client);
-		}
-	}
+    if (*password != '\0' && !client->pass_sent) {
+        /* client didn't send us PASS, kill it */
+        remove_client(client);
+    } else {
+        client->connected = TRUE;
+        bitserv_dump_data(client);
+    }
 }
 
 static void handle_client_cmd(CLIENT_REC *client, char *cmd, char *args,
@@ -665,6 +658,14 @@ static void read_settings(void)
 	}
 }
 
+static void sig_print_text(WINDOW_REC *win) {
+    GSList *tmp;
+    for (tmp = bitserv_clients; tmp != NULL; tmp = tmp->next) {
+        CLIENT_REC *rec = tmp->data;
+        bitserv_outdata(rec, "%d %s\n", dest->window->refnum, text);
+    }
+}
+
 static void sig_dump(CLIENT_REC *client, const char *data)
 {
 	g_return_if_fail(client != NULL);
@@ -681,16 +682,13 @@ void bitserv_listen_init(void)
 	bitserv_listens = NULL;
 	read_settings();
 
-	signal_add("server incoming", (SIGNAL_FUNC) sig_incoming);
-	signal_add("server event", (SIGNAL_FUNC) sig_server_event);
-	signal_add("event connected", (SIGNAL_FUNC) event_connected);
-	signal_add("server disconnected", (SIGNAL_FUNC) sig_server_disconnected);
 	signal_add_first("event nick", (SIGNAL_FUNC) event_nick);
 	signal_add("message own_public", (SIGNAL_FUNC) sig_message_own_public);
 	signal_add("message own_private", (SIGNAL_FUNC) sig_message_own_private);
 	signal_add("message irc own_action", (SIGNAL_FUNC) sig_message_own_action);
 	signal_add("setup changed", (SIGNAL_FUNC) read_settings);
-
+	
+    signal_add("gui print text finished", (SIGNAL_FUNC) sig_print_text);
 	signal_add("bitserv client dump", (SIGNAL_FUNC) sig_dump);
 }
 
@@ -700,15 +698,12 @@ void bitserv_listen_deinit(void)
 		remove_listen(bitserv_listens->data);
 	g_string_free(next_line, TRUE);
 
-	signal_remove("server incoming", (SIGNAL_FUNC) sig_incoming);
-	signal_remove("server event", (SIGNAL_FUNC) sig_server_event);
-	signal_remove("event connected", (SIGNAL_FUNC) event_connected);
-	signal_remove("server disconnected", (SIGNAL_FUNC) sig_server_disconnected);
 	signal_remove("event nick", (SIGNAL_FUNC) event_nick);
 	signal_remove("message own_public", (SIGNAL_FUNC) sig_message_own_public);
 	signal_remove("message own_private", (SIGNAL_FUNC) sig_message_own_private);
 	signal_remove("message irc own_action", (SIGNAL_FUNC) sig_message_own_action);
 	signal_remove("setup changed", (SIGNAL_FUNC) read_settings);
 
+    signal_remove("gui print text finished", (SIGNAL_FUNC) sig_print_text);
 	signal_remove("bitserv client dump", (SIGNAL_FUNC) sig_dump);
 }

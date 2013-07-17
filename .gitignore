@@ -35,3 +35,4 @@ src/fe-text/irssi
 Makefile.old
 *~
 docs/help/*
+*.sw?

@@ -30,6 +30,9 @@
 #include "irc-nicklist.h"
 #include "modes.h"
 
+#include "fe-common/core/printtext.h"
+#include "src/fe-text/gui-windows.h"
+
 void bitserv_outdata(CLIENT_REC *client, const char *data, ...)
 {
 	va_list args;
@@ -233,7 +236,19 @@ void bitserv_dump_data(CLIENT_REC *client)
 	char **paramlist, **tmp;
 	int count;
 
+    GString *text = g_string_new(NULL);
+    GSList *win_item;
+    for (win_item = windows; win_item != NULL; win_item = win_item->next) {
+        WINDOW_REC *win_rec = win_item->data;
+        TEXT_BUFFER_REC *buf = WINDOW_GUI(win_rec)->view->buffer;
+        LINE_REC *line = buf->first_line;
+        for (; line != NULL; line = line->next) {
+            textbuffer_line2text(line, TRUE, text);
+            bitserv_outdata(client, "%d %d %s\n", line->info.time, win_rec->refnum, text->str);
+        }
+    }
 	bitserv_client_reset_nick(client);
+
 
 	/* welcome info */
 	bitserv_outdata(client, ":%s 001 %s :Welcome to the Internet Relay Network %s!%s@bitserv\n", client->bitserv_address, client->nick, client->nick, settings_get_str("user_name"));
