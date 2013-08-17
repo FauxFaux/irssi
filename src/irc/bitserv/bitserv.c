@@ -20,7 +20,6 @@
 #include "fe-common/core/printtext.h"
 
 static GSList *bitserv_listens;
-static GSList *bitserv_clients;
 
 static GString *next_line;
 static int ignore_next;
@@ -49,6 +48,7 @@ typedef struct {
 	unsigned int want_ctcp:1;
 } CLIENT_REC;
 
+static CLIENT_REC connected_client = {};
 
 static void bitserv_outdata(CLIENT_REC *client, const char *data, ...)
 {
@@ -62,32 +62,6 @@ static void bitserv_outdata(CLIENT_REC *client, const char *data, ...)
 
 	str = g_strdup_vprintf(data, args);
 	net_sendbuffer_send(client->handle, str, strlen(str));
-	g_free(str);
-
-	va_end(args);
-}
-
-static void bitserv_outserver_all_except(CLIENT_REC *client, const char *data, ...)
-{
-	va_list args;
-	GSList *tmp;
-	char *str;
-
-	g_return_if_fail(client != NULL);
-	g_return_if_fail(data != NULL);
-
-	va_start(args, data);
-
-	str = g_strdup_vprintf(data, args);
-	for (tmp = bitserv_clients; tmp != NULL; tmp = tmp->next) {
-		CLIENT_REC *rec = tmp->data;
-
-		if (rec->connected && rec != client &&
-		    rec->server == client->server) {
-			bitserv_outdata(rec, ":%s!%s@bitserv %s\n", rec->nick,
-				      settings_get_str("user_name"), str);
-		}
-	}
 	g_free(str);
 
 	va_end(args);
@@ -194,37 +168,6 @@ static void handle_client_cmd(CLIENT_REC *client, char *cmd, char *args,
 			return;
 		}
 		g_free(params);
-	} else if (strcmp(cmd, "PRIVMSG") == 0) {
-		/* send the message to other clients as well */
-		char *params, *target, *msg;
-
-		params = event_get_params(args, 2 | PARAM_FLAG_GETREST,
-					  &target, &msg);
-		bitserv_outserver_all_except(client, "PRIVMSG %s", args);
-
-		ignore_next = TRUE;
-		if (*msg != '\001' || msg[strlen(msg)-1] != '\001') {
-	        	signal_emit(ischannel(*target) ?
-				    "message own_public" : "message own_private", 4,
-				    client->server, msg, target, target);
-		} else if (strncmp(msg+1, "ACTION ", 7) == 0) {
-			/* action */
-                        msg[strlen(msg)-1] = '\0';
-			signal_emit("message irc own_action", 3,
-				    client->server, msg+8, target);
-		} else {
-                        /* CTCP */
-			char *p;
-
-			msg[strlen(msg)-1] = '\0';
-			p = strchr(msg, ' ');
-                        if (p != NULL) *p++ = '\0'; else p = "";
-
-			signal_emit("message irc own_ctcp", 4,
-				    client->server, msg+1, p, target);
-		}
-		ignore_next = FALSE;
-		g_free(params);
 	} else if (strcmp(cmd, "PING") == 0) {
 		bitserv_redirect_event(client, "ping", 1, NULL, TRUE);
 	} else if (strcmp(cmd, "AWAY") == 0) {
@@ -288,7 +231,7 @@ static void sig_listen(LISTEN_REC *listen)
 	rec = g_new0(CLIENT_REC, 1);
 	rec->listen = listen;
 	rec->handle = sendbuf;
-        rec->host = g_strdup(host);
+    rec->host = g_strdup(host);
 	if (strcmp(listen->ircnet, "*") == 0) {
 		rec->bitserv_address = g_strdup("irc.bitserv");
 		rec->server = servers == NULL ? NULL : IRC_SERVER(servers->data);
@@ -417,10 +360,7 @@ static void read_settings(void)
 
 static void sig_print_text(WINDOW_REC *win) {
     GSList *tmp;
-    for (tmp = bitserv_clients; tmp != NULL; tmp = tmp->next) {
-        CLIENT_REC *rec = tmp->data;
-//        bitserv_outdata(rec, "%d %s\n", win->refnum, text);
-    }
+//        bitserv_outdata(current_, "%d %s\n", win->refnum, text);
 }
 
 static void sig_dump(CLIENT_REC *client, const char *data)
@@ -435,7 +375,7 @@ static void bitserv_listen_init(void)
 {
 	next_line = g_string_new(NULL);
 
-	bitserv_clients = NULL;
+	memset(&connected_client, 0, sizeof(connected_client));
 	bitserv_listens = NULL;
 	read_settings();
 
