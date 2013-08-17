@@ -1,6 +1,6 @@
 #include "common.h"
 
-#define MODULE_NAME "bitserv"
+#define MODULE_NAME "irssicp"
 
 #include "irc.h"
 #include "irc-channels.h"
@@ -19,7 +19,7 @@
 #include "fe-text/gui-windows.h"
 #include "fe-common/core/printtext.h"
 
-static GSList *bitserv_listens;
+static GSList *irssicp_listens;
 
 static GString *next_line;
 static int ignore_next;
@@ -39,7 +39,7 @@ typedef struct {
 	char *nick, *host;
 	NET_SENDBUF_REC *handle;
 	int recv_tag;
-	char *bitserv_address;
+	char *irssicp_address;
 	LISTEN_REC *listen;
 	IRC_SERVER_REC *server;
 	unsigned int pass_sent:1;
@@ -50,7 +50,7 @@ typedef struct {
 
 static CLIENT_REC connected_client = {};
 
-static void bitserv_outdata(CLIENT_REC *client, const char *data, ...)
+static void irssicp_outdata(CLIENT_REC *client, const char *data, ...)
 {
 	va_list args;
 	char *str;
@@ -67,7 +67,7 @@ static void bitserv_outdata(CLIENT_REC *client, const char *data, ...)
 	va_end(args);
 }
 
-static void bitserv_dump_data(CLIENT_REC *client) {
+static void irssicp_dump_data(CLIENT_REC *client) {
     GString *text = g_string_new(NULL);
     GSList *win_item;
     for (win_item = windows; win_item != NULL; win_item = win_item->next) {
@@ -76,7 +76,7 @@ static void bitserv_dump_data(CLIENT_REC *client) {
         LINE_REC *line = buf->first_line;
         for (; line != NULL; line = line->next) {
             textbuffer_line2text(line, TRUE, text);
-            bitserv_outdata(client, "%d %d %s\n", line->info.time, win_rec->refnum, text->str);
+            irssicp_outdata(client, "%d %d %s\n", line->info.time, win_rec->refnum, text->str);
         }
     }
 }
@@ -85,14 +85,14 @@ static void remove_client(CLIENT_REC *rec)
 {
 	g_return_if_fail(rec != NULL);
 
-	bitserv_clients = g_slist_remove(bitserv_clients, rec);
+	irssicp_clients = g_slist_remove(irssicp_clients, rec);
 	rec->listen->clients = g_slist_remove(rec->listen->clients, rec);
 
-	signal_emit("bitserv client disconnected", 1, rec);
+	signal_emit("irssicp client disconnected", 1, rec);
 	printtext(NULL, NULL, MSGLEVEL_CLIENTNOTICE,
 		  "Proxy: Client disconnected from %s", rec->host);
 
-	g_free(rec->bitserv_address);
+	g_free(rec->irssicp_address);
 	net_sendbuffer_destroy(rec->handle, TRUE);
 	g_source_remove(rec->recv_tag);
 	g_free_not_null(rec->nick);
@@ -100,14 +100,14 @@ static void remove_client(CLIENT_REC *rec)
 	g_free(rec);
 }
 
-static void bitserv_redirect_event(CLIENT_REC *client, const char *command,
+static void irssicp_redirect_event(CLIENT_REC *client, const char *command,
 				 int count, const char *arg, int remote)
 {
 	char *str;
 
 	g_return_if_fail(client != NULL);
 
-	str = g_strdup_printf("bitserv %p", client);
+	str = g_strdup_printf("irssicp %p", client);
 	server_redirect_event(client->server, command, count,
 			      arg, remote, NULL, "", str, NULL);
 	g_free(str);
@@ -118,7 +118,7 @@ static void handle_client_connect_cmd(CLIENT_REC *client,
 {
 	const char *password;
 
-	password = settings_get_str("irssibitserv_password");
+	password = settings_get_str("irssiirssicp_password");
 
 	if (password != NULL && strcmp(cmd, "PASS") == 0) {
 		if (strcmp(password, args) == 0)
@@ -135,7 +135,7 @@ static void handle_client_connect_cmd(CLIENT_REC *client,
         remove_client(client);
     } else {
         client->connected = TRUE;
-        bitserv_dump_data(client);
+        irssicp_dump_data(client);
     }
 }
 
@@ -154,22 +154,22 @@ static void handle_client_cmd(CLIENT_REC *client, char *cmd, char *args,
 
 	if (strcmp(cmd, "PING") == 0) {
 		/* Reply to PING, if the target parameter is either
-		   bitserv_adress, our own nick or empty. */
+		   irssicp_adress, our own nick or empty. */
 		char *params, *origin, *target;
 
 		params = event_get_params(args, 2, &origin, &target);
 		if (*target == '\0' ||
-		    g_strcasecmp(target, client->bitserv_address) == 0 ||
+		    g_strcasecmp(target, client->irssicp_address) == 0 ||
 		    g_strcasecmp(target, client->nick) == 0) {
-			bitserv_outdata(client, ":%s PONG %s :%s\n",
-				      client->bitserv_address,
-                                      client->bitserv_address, origin);
+			irssicp_outdata(client, ":%s PONG %s :%s\n",
+				      client->irssicp_address,
+                                      client->irssicp_address, origin);
 			g_free(params);
 			return;
 		}
 		g_free(params);
 	} else if (strcmp(cmd, "PING") == 0) {
-		bitserv_redirect_event(client, "ping", 1, NULL, TRUE);
+		irssicp_redirect_event(client, "ping", 1, NULL, TRUE);
 	} else if (strcmp(cmd, "AWAY") == 0) {
 		/* set the away reason */
 		if (args != NULL) {
@@ -188,7 +188,7 @@ static void sig_listen_client(CLIENT_REC *client)
 
 	g_return_if_fail(client != NULL);
 
-	while (g_slist_find(bitserv_clients, client) != NULL) {
+	while (g_slist_find(irssicp_clients, client) != NULL) {
 		ret = net_sendbuffer_receive_line(client->handle, &str, 1);
 		if (ret == -1) {
 			/* connection lost */
@@ -233,20 +233,20 @@ static void sig_listen(LISTEN_REC *listen)
 	rec->handle = sendbuf;
     rec->host = g_strdup(host);
 	if (strcmp(listen->ircnet, "*") == 0) {
-		rec->bitserv_address = g_strdup("irc.bitserv");
+		rec->irssicp_address = g_strdup("irc.irssicp");
 		rec->server = servers == NULL ? NULL : IRC_SERVER(servers->data);
 	} else {
-		rec->bitserv_address = g_strdup_printf("%s.bitserv", listen->ircnet);
+		rec->irssicp_address = g_strdup_printf("%s.irssicp", listen->ircnet);
 		rec->server = servers == NULL ? NULL :
 			IRC_SERVER(server_find_chatnet(listen->ircnet));
 	}
 	rec->recv_tag = g_input_add(handle, G_INPUT_READ,
 			       (GInputFunction) sig_listen_client, rec);
 
-	bitserv_clients = g_slist_prepend(bitserv_clients, rec);
+	irssicp_clients = g_slist_prepend(irssicp_clients, rec);
 	rec->listen->clients = g_slist_prepend(rec->listen->clients, rec);
 
-        signal_emit("bitserv client connected", 1, rec);
+        signal_emit("irssicp client connected", 1, rec);
 	printtext(NULL, NULL, MSGLEVEL_CLIENTNOTICE,
 		  "Proxy: Client connected from %s", rec->host);
 }
@@ -255,7 +255,7 @@ static LISTEN_REC *find_listen(const char *ircnet, int port)
 {
 	GSList *tmp;
 
-	for (tmp = bitserv_listens; tmp != NULL; tmp = tmp->next) {
+	for (tmp = irssicp_listens; tmp != NULL; tmp = tmp->next) {
 		LISTEN_REC *rec = tmp->data;
 
 		if (rec->port == port &&
@@ -276,12 +276,12 @@ static void add_listen(const char *ircnet, int port)
 
 	/* bind to specific host/ip? */
 	my_ip = NULL;
-	if (*settings_get_str("irssibitserv_bind") != '\0') {
-		if (net_gethostbyname(settings_get_str("irssibitserv_bind"),
+	if (*settings_get_str("irssiirssicp_bind") != '\0') {
+		if (net_gethostbyname(settings_get_str("irssiirssicp_bind"),
 				      &ip4, &ip6) != 0) {
 			printtext(NULL, NULL, MSGLEVEL_CLIENTERROR,
 				  "Proxy: can not resolve '%s' - aborting",
-				  settings_get_str("irssibitserv_bind"));
+				  settings_get_str("irssiirssicp_bind"));
 			return;
 		}
 
@@ -307,12 +307,12 @@ static void add_listen(const char *ircnet, int port)
 	rec->tag = g_input_add(rec->handle, G_INPUT_READ,
 			       (GInputFunction) sig_listen, rec);
 
-        bitserv_listens = g_slist_append(bitserv_listens, rec);
+        irssicp_listens = g_slist_append(irssicp_listens, rec);
 }
 
 static void remove_listen(LISTEN_REC *rec)
 {
-	bitserv_listens = g_slist_remove(bitserv_listens, rec);
+	irssicp_listens = g_slist_remove(irssicp_listens, rec);
 
 	while (rec->clients != NULL)
 		remove_client(rec->clients->data);
@@ -330,9 +330,9 @@ static void read_settings(void)
 	char **ports, **tmp, *ircnet, *port;
 	int portnum;
 
-	remove_listens = g_slist_copy(bitserv_listens);
+	remove_listens = g_slist_copy(irssicp_listens);
 
-	ports = g_strsplit(settings_get_str("irssibitserv_ports"), " ", -1);
+	ports = g_strsplit(settings_get_str("irssiirssicp_ports"), " ", -1);
 	for (tmp = ports; *tmp != NULL; tmp++) {
 		ircnet = *tmp;
 		port = strchr(ircnet, '=');
@@ -360,7 +360,7 @@ static void read_settings(void)
 
 static void sig_print_text(WINDOW_REC *win) {
     GSList *tmp;
-//        bitserv_outdata(current_, "%d %s\n", win->refnum, text);
+//        irssicp_outdata(current_, "%d %s\n", win->refnum, text);
 }
 
 static void sig_dump(CLIENT_REC *client, const char *data)
@@ -368,61 +368,61 @@ static void sig_dump(CLIENT_REC *client, const char *data)
 	g_return_if_fail(client != NULL);
 	g_return_if_fail(data != NULL);
 
-	bitserv_outdata(client, data);
+	irssicp_outdata(client, data);
 }
 
-static void bitserv_listen_init(void)
+static void irssicp_listen_init(void)
 {
 	next_line = g_string_new(NULL);
 
 	memset(&connected_client, 0, sizeof(connected_client));
-	bitserv_listens = NULL;
+	irssicp_listens = NULL;
 	read_settings();
 
 	signal_add("setup changed", (SIGNAL_FUNC) read_settings);
 	
     signal_add("gui print text finished", (SIGNAL_FUNC) sig_print_text);
-	signal_add("bitserv client dump", (SIGNAL_FUNC) sig_dump);
+	signal_add("irssicp client dump", (SIGNAL_FUNC) sig_dump);
 }
 
-static void bitserv_listen_deinit(void)
+static void irssicp_listen_deinit(void)
 {
-	while (bitserv_listens != NULL)
-		remove_listen(bitserv_listens->data);
+	while (irssicp_listens != NULL)
+		remove_listen(irssicp_listens->data);
 	g_string_free(next_line, TRUE);
 
 	signal_remove("setup changed", (SIGNAL_FUNC) read_settings);
 
     signal_remove("gui print text finished", (SIGNAL_FUNC) sig_print_text);
-	signal_remove("bitserv client dump", (SIGNAL_FUNC) sig_dump);
+	signal_remove("irssicp client dump", (SIGNAL_FUNC) sig_dump);
 }
 
-void irc_bitserv_init(void)
+void irc_irssicp_init(void)
 {
-	settings_add_str("irssibitserv", "irssibitserv_ports", "");
-	settings_add_str("irssibitserv", "irssibitserv_password", "");
-	settings_add_str("irssibitserv", "irssibitserv_bind", "");
+	settings_add_str("irssiirssicp", "irssiirssicp_ports", "");
+	settings_add_str("irssiirssicp", "irssiirssicp_password", "");
+	settings_add_str("irssiirssicp", "irssiirssicp_bind", "");
 
-	if (*settings_get_str("irssibitserv_password") == '\0') {
+	if (*settings_get_str("irssiirssicp_password") == '\0') {
 		/* no password - bad idea! */
 		signal_emit("gui dialog", 2, "warning",
 			    "Warning!! Password not specified, everyone can "
-			    "use this bitserv! Use /set irssibitserv_password "
+			    "use this irssicp! Use /set irssiirssicp_password "
 			    "<password> to set it");
 	}
-	if (*settings_get_str("irssibitserv_ports") == '\0') {
+	if (*settings_get_str("irssiirssicp_ports") == '\0') {
 		signal_emit("gui dialog", 2, "warning",
-			    "No bitserv ports specified. Use /SET "
-			    "irssibitserv_ports <ircnet>=<port> <ircnet2>=<port2> "
+			    "No irssicp ports specified. Use /SET "
+			    "irssiirssicp_ports <ircnet>=<port> <ircnet2>=<port2> "
 			    "... to set them.");
 	}
 
-	bitserv_listen_init();
+	irssicp_listen_init();
 	settings_check();
-        module_register("bitserv", "irc");
+        module_register("irssicp", "irc");
 }
 
-void irc_bitserv_deinit(void)
+void irc_irssicp_deinit(void)
 {
-	bitserv_listen_deinit();
+	irssicp_listen_deinit();
 }
