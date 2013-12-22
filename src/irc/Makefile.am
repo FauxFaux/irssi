@@ -2,7 +2,7 @@ if BUILD_IRSSIPROXY
 PROXY=proxy
 endif
 
-SUBDIRS = core dcc flood notifylist $(PROXY) bitserv
+SUBDIRS = core dcc flood notifylist $(PROXY) irssicp
 
 noinst_LIBRARIES = libirc.a
 

@@ -651,7 +651,7 @@ src/irc/core/Makefile
 src/irc/dcc/Makefile
 src/irc/notifylist/Makefile
 src/irc/proxy/Makefile
-src/irc/bitserv/Makefile
+src/irc/irssicp/Makefile
 src/irc/flood/Makefile
 src/fe-common/Makefile
 src/fe-common/core/Makefile
