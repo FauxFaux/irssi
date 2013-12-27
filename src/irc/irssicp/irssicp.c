@@ -186,10 +186,11 @@ gboolean zmq_gio_worker(GIOChannel *source, GIOCondition condition, gpointer dat
             signal_emit("gui dialog", 2, "warning", "couldn't consume message");
             return 0;
         }
-
-        zmq_send(data, zmq_msg_data(&msg), zmq_msg_size(&msg), 0);
+        GString *s = g_string_new_len(zmq_msg_data(&msg), zmq_msg_size(&msg));
+        signal_emit("send command", 3, s->str, active_win->active_server, active_win->active);
+        g_string_free(s, FALSE);
         zmq_msg_close(&msg);
-        signal_emit("gui dialog", 2, "warning", "twerk");
+        zmq_send(data, "ok", strlen("ok"), 0);
     }
 }
 
