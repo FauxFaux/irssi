@@ -23,6 +23,7 @@
 
 static void *ctx;
 static void *pubsock;
+static void *cmdsock;
 
 static GString *next_line;
 static int ignore_next;
@@ -164,39 +165,55 @@ static void sig_dump(void *client, const char *data)
 gboolean zmq_gio_worker(GIOChannel *source, GIOCondition condition, gpointer data)
 {
     uint32_t status;
-    size_t sizeof_status = sizeof(status);
+    while (1) {
+        size_t sizeof_status = sizeof(status);
+        if (zmq_getsockopt(data, ZMQ_EVENTS, &status, &sizeof_status)) {
+            signal_emit("gui dialog", 2, "warning", "retrieving event status failed; doom");
+            return 0;
+        }
 
-    if (zmq_getsockopt(data, ZMQ_EVENTS, &status, &sizeof_status)) {
-        signal_emit("gui dialog", 2, "warning", "retrieving event status failed; doom");
-        return 0;
+        if ((status & ZMQ_POLLIN) == 0) {
+            return 1;
+        }
+
+        zmq_msg_t msg;
+        if (0 != zmq_msg_init(&msg)) {
+            signal_emit("gui dialog", 2, "warning", "couldn't make message");
+            return 0;
+        }
+
+        if (0 != zmq_recvmsg(data, &msg, 0)) {
+            signal_emit("gui dialog", 2, "warning", "couldn't consume message");
+            return 0;
+        }
+
+        zmq_msg_close(&msg);
+        zmq_send(data, "hi", 2, 0);
+        signal_emit("gui dialog", 2, "warning", "twerk");
     }
-
-    signal_emit("gui dialog", 2, "warning", "twerk");
-
-    if ((status & ZMQ_POLLIN) == 0) {
-        return 1;
-    }
-
-    // do work
-
-    return 1; // keep the callback active
 }
 
 static void irssicp_listen_init(void)
 {
     next_line = g_string_new(NULL);
     pubsock = zmq_socket(ctx, ZMQ_PUB);
+    cmdsock = zmq_socket(ctx, ZMQ_REP);
     if (zmq_bind(pubsock, "tcp://*:5556")) {
-        signal_emit("gui dialog", 2, "warning", "unbindable");
+        signal_emit("gui dialog", 2, "warning", "unbindable 1");
     }
+
+    if (zmq_bind(cmdsock, "tcp://*:5557")) {
+        signal_emit("gui dialog", 2, "warning", "unbindable 2");
+    }
+
 
     int fd;
     size_t sizeof_fd = sizeof(fd);
-    if (zmq_getsockopt(pubsock, ZMQ_FD, &fd, &sizeof_fd)) {
+    if (zmq_getsockopt(cmdsock, ZMQ_FD, &fd, &sizeof_fd)) {
         signal_emit("gui dialog", 2, "warning", "fd extraction failed; we're screwed");
     }
     GIOChannel *ichan = g_io_channel_unix_new(fd);
-    g_io_add_watch(ichan, G_IO_IN|G_IO_ERR|G_IO_HUP, zmq_gio_worker, pubsock);
+    g_io_add_watch(ichan, G_IO_IN|G_IO_ERR|G_IO_HUP, zmq_gio_worker, cmdsock);
 
     signal_add("gui print text finished", (SIGNAL_FUNC) sig_print_text);
     signal_add("irssicp client dump", (SIGNAL_FUNC) sig_dump);
