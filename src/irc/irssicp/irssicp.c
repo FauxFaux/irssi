@@ -150,7 +150,7 @@ static void sig_print_text(WINDOW_REC *win) {
                 )->view->buffer);
     GString *str = g_string_new(NULL);
     textbuffer_line2text(l, 0, str);
-    irssicp_outdata(pubsock, "%d %s", win->refnum, str->str);
+    irssicp_outdata(pubsock, "%04d %s", win->refnum, str->str);
     g_string_free(str, 1);
 }
 
