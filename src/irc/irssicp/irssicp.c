@@ -182,13 +182,13 @@ gboolean zmq_gio_worker(GIOChannel *source, GIOCondition condition, gpointer dat
             return 0;
         }
 
-        if (0 != zmq_recvmsg(data, &msg, 0)) {
+        if (-1 == zmq_recvmsg(data, &msg, 0)) {
             signal_emit("gui dialog", 2, "warning", "couldn't consume message");
             return 0;
         }
 
+        zmq_send(data, zmq_msg_data(&msg), zmq_msg_size(&msg), 0);
         zmq_msg_close(&msg);
-        zmq_send(data, "hi", 2, 0);
         signal_emit("gui dialog", 2, "warning", "twerk");
     }
 }
