@@ -189,7 +189,7 @@ static void irssicp_listen_init(void)
     if (zmq_bind(pubsock, "tcp://*:5556")) {
         signal_emit("gui dialog", 2, "warning", "unbindable");
     }
-#if 0
+
     int fd;
     size_t sizeof_fd = sizeof(fd);
     if (zmq_getsockopt(pubsock, ZMQ_FD, &fd, &sizeof_fd)) {
@@ -197,7 +197,7 @@ static void irssicp_listen_init(void)
     }
     GIOChannel *ichan = g_io_channel_unix_new(fd);
     g_io_add_watch(ichan, G_IO_IN|G_IO_ERR|G_IO_HUP, zmq_gio_worker, pubsock);
-#endif
+
     signal_add("gui print text finished", (SIGNAL_FUNC) sig_print_text);
     signal_add("irssicp client dump", (SIGNAL_FUNC) sig_dump);
 }
