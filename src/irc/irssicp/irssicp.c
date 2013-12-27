@@ -182,14 +182,17 @@ gboolean zmq_gio_worker(GIOChannel *source, GIOCondition condition, gpointer dat
             return 0;
         }
 
-        if (-1 == zmq_recvmsg(data, &msg, 0)) {
+        int sz;
+        if (-1 == (sz = zmq_recvmsg(data, &msg, 0))) {
             signal_emit("gui dialog", 2, "warning", "couldn't consume message");
             return 0;
         }
-        GString *s = g_string_new_len(zmq_msg_data(&msg), zmq_msg_size(&msg));
-        signal_emit("send command", 3, s->str, active_win->active_server, active_win->active);
-        g_string_free(s, FALSE);
+        char *buf = malloc(sz + 1);
+        memcpy(buf, zmq_msg_data(&msg), sz);
         zmq_msg_close(&msg);
+        buf[sz] = 0;
+        signal_emit("send command", 3, buf, active_win->active_server, active_win->active);
+        free(buf);
         zmq_send(data, "ok", strlen("ok"), 0);
     }
 }
